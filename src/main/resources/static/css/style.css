@@ -184,6 +184,21 @@ main {
     background-color: #3a5a80;
 }
 
+.kick-btn {
+    float: right;
+    padding: 2px 8px;
+    background-color: #ff6b6b;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.kick-btn:hover {
+    background-color: #ff5252;
+}
+
 .chat-area {
     flex: 1;
     display: flex;

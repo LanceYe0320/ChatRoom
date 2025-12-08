@@ -432,6 +432,19 @@ class ChatApp {
                     }
                     li.textContent = member.username + roleText;
                     li.dataset.userId = member.id;
+                    
+                    // 如果当前用户是群主且目标不是自己，则添加踢人按钮
+                    if (this.currentGroup.ownerId === this.currentUser.id && member.id !== this.currentUser.id) {
+                        const kickBtn = document.createElement('button');
+                        kickBtn.textContent = '踢出';
+                        kickBtn.className = 'kick-btn';
+                        kickBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            this.kickMember(groupId, member.id, member.username);
+                        };
+                        li.appendChild(kickBtn);
+                    }
+                    
                     this.groupMembersList.appendChild(li);
                 });
             }
@@ -439,7 +452,36 @@ class ChatApp {
             console.error('加载群组成员失败:', error);
         }
     }
-    
+
+    // 踢出群成员
+    async kickMember(groupId, userId, username) {
+        if (!confirm(`确定要将用户 "${username}" 踢出群组吗？`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/groups/${groupId}/members/${userId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert(`用户 "${username}" 已被踢出群组`);
+                // 重新加载群组成员列表
+                await this.loadGroupMembers(groupId);
+            } else {
+                alert('踢出用户失败: ' + data.message);
+            }
+        } catch (error) {
+            console.error('踢出用户失败:', error);
+            alert('踢出用户过程中发生错误');
+        }
+    }
+
     async loadPrivateChatHistory(userId) {
         try {
             const response = await fetch(`/api/messages/private/${userId}`, {
