@@ -219,6 +219,12 @@ class ChatApp {
             case 'GROUP_NOTIFICATION':
                 this.displaySystemMessage(message.content);
                 break;
+            case 'PRIVATE_MESSAGE_ACK':
+                // 这是发送私聊消息的确认，我们可以在这里加载历史消息或做其他处理
+                break;
+            case 'GROUP_MESSAGE_ACK':
+                // 这是发送群聊消息的确认
+                break;
         }
     }
     
@@ -274,7 +280,7 @@ class ChatApp {
         }
     }
     
-    startPrivateChat(user) {
+    async startPrivateChat(user) {
         this.currentChat = {
             type: 'user',
             id: user.id,
@@ -282,9 +288,12 @@ class ChatApp {
         };
         this.chatTitle.textContent = `与 ${user.username} 聊天`;
         this.messagesContainer.innerHTML = '';
+        
+        // 加载历史消息
+        await this.loadPrivateChatHistory(user.id);
     }
     
-    startGroupChat(group) {
+    async startGroupChat(group) {
         this.currentChat = {
             type: 'group',
             id: group.id,
@@ -292,6 +301,65 @@ class ChatApp {
         };
         this.chatTitle.textContent = `群组: ${group.name}`;
         this.messagesContainer.innerHTML = '';
+        
+        // 加载群组历史消息
+        await this.loadGroupChatHistory(group.id);
+    }
+    
+    async loadPrivateChatHistory(userId) {
+        try {
+            const response = await fetch(`/api/messages/private/${userId}`, {
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // 按时间顺序排列消息（从旧到新）
+                data.data.reverse().forEach(message => {
+                    const wsMessage = {
+                        type: 'PRIVATE_MESSAGE',
+                        senderId: message.senderId,
+                        senderUsername: message.senderUsername,
+                        content: message.content,
+                        timestamp: message.createdAt
+                    };
+                    this.displayPrivateMessage(wsMessage);
+                });
+            }
+        } catch (error) {
+            console.error('加载私聊历史消息失败:', error);
+        }
+    }
+    
+    async loadGroupChatHistory(groupId) {
+        try {
+            const response = await fetch(`/api/messages/group/${groupId}`, {
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // 按时间顺序排列消息（从旧到新）
+                data.data.reverse().forEach(message => {
+                    const wsMessage = {
+                        type: 'GROUP_MESSAGE',
+                        senderId: message.senderId,
+                        senderUsername: message.senderUsername,
+                        content: message.content,
+                        timestamp: message.createdAt
+                    };
+                    this.displayGroupMessage(wsMessage);
+                });
+            }
+        } catch (error) {
+            console.error('加载群聊历史消息失败:', error);
+        }
     }
     
     sendMessage() {
@@ -339,7 +407,7 @@ class ChatApp {
         const senderName = isSent ? '我' : message.senderUsername;
         
         const messageElement = document.createElement('div');
-        messageElement.className = `message received`;
+        messageElement.className = `message ${isSent ? 'sent' : 'received'}`;
         messageElement.innerHTML = `
             <div class="message-header">
                 ${senderName}
@@ -385,11 +453,32 @@ class ChatApp {
         }
     }
     
-    createGroup() {
+    async createGroup() {
         const groupName = prompt('请输入群组名称:');
         if (groupName) {
-            // 这里应该调用API创建群组
-            alert('创建群组功能需要进一步实现');
+            try {
+                const response = await fetch('/api/groups', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.token}`
+                    },
+                    body: JSON.stringify({ name: groupName })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('群组创建成功!');
+                    // 重新加载群组列表
+                    this.loadUserGroups();
+                } else {
+                    alert('创建群组失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('创建群组错误:', error);
+                alert('创建群组过程中发生错误');
+            }
         }
     }
     

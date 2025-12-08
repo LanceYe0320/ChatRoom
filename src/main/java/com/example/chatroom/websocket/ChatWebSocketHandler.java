@@ -11,6 +11,7 @@ import com.example.chatroom.service.MessageService;
 import com.example.chatroom.websocket.dto.WebSocketMessage;
 import com.example.chatroom.websocket.dto.WebSocketMessageType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -165,14 +166,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 sendMessage(receiverSession, responseMessage);
             }
 
-            // 发送确认给发送者
-            WebSocketMessage ack = WebSocketMessage.builder()
-                    .type(WebSocketMessageType.PRIVATE_MESSAGE_ACK)
+            // 向发送者发送消息以显示在自己的界面上
+            WebSocketMessage senderMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessageType.PRIVATE_MESSAGE)
                     .messageId(savedMessage.getId())
+                    .senderId(senderId)
+                    .senderUsername(wsMessage.getSenderUsername())
+                    .senderNickname(savedMessage.getSender().getNickname())
                     .receiverId(receiverId)
+                    .content(content)
                     .timestamp(savedMessage.getCreatedAt())
                     .build();
-            sendMessage(senderSession, ack);
+            sendMessage(senderSession, senderMessage);
 
             log.info("私聊消息已发送: {} -> {}", senderId, receiverId);
         } catch (Exception e) {
@@ -228,14 +233,19 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 }
             }
 
-            // 发送确认给发送者
-            WebSocketMessage ack = WebSocketMessage.builder()
-                    .type(WebSocketMessageType.GROUP_MESSAGE_ACK)
+            // 向发送者发送消息以显示在自己的界面上
+            WebSocketMessage senderMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessageType.GROUP_MESSAGE)
                     .messageId(savedMessage.getId())
+                    .senderId(senderId)
+                    .senderUsername(wsMessage.getSenderUsername())
+                    .senderNickname(savedMessage.getSender().getNickname())
                     .groupId(groupId)
+                    .groupName(savedMessage.getGroup().getName())
+                    .content(content)
                     .timestamp(savedMessage.getCreatedAt())
                     .build();
-            sendMessage(senderSession, ack);
+            sendMessage(senderSession, senderMessage);
 
             log.info("群聊消息已发送: {} -> 群组{}", senderId, groupId);
         } catch (Exception e) {
