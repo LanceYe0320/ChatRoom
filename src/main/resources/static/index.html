@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天室</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💬 聊天室</h1>
+            <div id="user-info" class="hidden">
+                <span id="username"></span>
+                <button id="logout-btn">退出</button>
+            </div>
+        </header>
+
+        <main>
+            <!-- 登录/注册表单 -->
+            <div id="auth-section">
+                <div class="form-container">
+                    <div class="tabs">
+                        <button id="login-tab" class="tab active">登录</button>
+                        <button id="register-tab" class="tab">注册</button>
+                    </div>
+
+                    <!-- 登录表单 -->
+                    <form id="login-form" class="auth-form">
+                        <div class="form-group">
+                            <label for="login-username">用户名:</label>
+                            <input type="text" id="login-username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">密码:</label>
+                            <input type="password" id="login-password" required>
+                        </div>
+                        <button type="submit">登录</button>
+                    </form>
+
+                    <!-- 注册表单 -->
+                    <form id="register-form" class="auth-form hidden">
+                        <div class="form-group">
+                            <label for="register-username">用户名:</label>
+                            <input type="text" id="register-username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="register-email">邮箱:</label>
+                            <input type="email" id="register-email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="register-password">密码:</label>
+                            <input type="password" id="register-password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="register-nickname">昵称:</label>
+                            <input type="text" id="register-nickname">
+                        </div>
+                        <button type="submit">注册</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 聊天界面 -->
+            <div id="chat-section" class="hidden">
+                <div class="sidebar">
+                    <div class="online-users">
+                        <h3>在线用户</h3>
+                        <ul id="online-users-list"></ul>
+                    </div>
+                    <div class="groups">
+                        <h3>我的群组</h3>
+                        <ul id="groups-list"></ul>
+                        <button id="create-group-btn">创建群组</button>
+                    </div>
+                </div>
+
+                <div class="chat-area">
+                    <div class="chat-header">
+                        <h2 id="chat-title">欢迎使用聊天室</h2>
+                    </div>
+                    <div class="messages" id="messages-container"></div>
+                    <div class="message-input">
+                        <input type="text" id="message-input" placeholder="输入消息...">
+                        <button id="send-message-btn">发送</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
