@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.socket.CloseStatus;
@@ -27,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -156,46 +158,68 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
 
         try {
-            // 保存消息到数据库
-            Message savedMessage = messageService.savePrivateMessage(senderId, receiverId, content);
-            MessageResponse messageResponse = MessageResponse.fromEntity(savedMessage);
+            // 异步保存消息到数据库
+            CompletableFuture<Message> future = savePrivateMessageAsync(senderId, receiverId, content);
+            
+            // 处理结果
+            future.thenAccept(savedMessage -> {
+                try {
+                    MessageResponse messageResponse = MessageResponse.fromEntity(savedMessage);
 
-            // 构建响应消息
-            WebSocketMessage responseMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessageType.PRIVATE_MESSAGE)
-                    .messageId(savedMessage.getId())
-                    .senderId(senderId)
-                    .senderUsername(wsMessage.getSenderUsername())
-                    .senderNickname(savedMessage.getSender().getNickname())
-                    .receiverId(receiverId)
-                    .content(content)
-                    .timestamp(savedMessage.getCreatedAt())
-                    .build();
+                    // 构建响应消息
+                    WebSocketMessage responseMessage = WebSocketMessage.builder()
+                            .type(WebSocketMessageType.PRIVATE_MESSAGE)
+                            .messageId(savedMessage.getId())
+                            .senderId(senderId)
+                            .senderUsername(wsMessage.getSenderUsername())
+                            .senderNickname(savedMessage.getSender().getNickname())
+                            .receiverId(receiverId)
+                            .content(content)
+                            .timestamp(savedMessage.getCreatedAt())
+                            .build();
 
-            // 发送给接收者
-            WebSocketSession receiverSession = sessionManager.getSession(receiverId);
-            if (receiverSession != null && receiverSession.isOpen()) {
-                sendMessage(receiverSession, responseMessage);
-            }
+                    // 发送给接收者
+                    WebSocketSession receiverSession = sessionManager.getSession(receiverId);
+                    if (receiverSession != null && receiverSession.isOpen()) {
+                        sendMessage(receiverSession, responseMessage);
+                    }
 
-            // 向发送者发送消息以显示在自己的界面上
-            WebSocketMessage senderMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessageType.PRIVATE_MESSAGE)
-                    .messageId(savedMessage.getId())
-                    .senderId(senderId)
-                    .senderUsername(wsMessage.getSenderUsername())
-                    .senderNickname(savedMessage.getSender().getNickname())
-                    .receiverId(receiverId)
-                    .content(content)
-                    .timestamp(savedMessage.getCreatedAt())
-                    .build();
-            sendMessage(senderSession, senderMessage);
+                    // 向发送者发送消息以显示在自己的界面上
+                    WebSocketMessage senderMessage = WebSocketMessage.builder()
+                            .type(WebSocketMessageType.PRIVATE_MESSAGE)
+                            .messageId(savedMessage.getId())
+                            .senderId(senderId)
+                            .senderUsername(wsMessage.getSenderUsername())
+                            .senderNickname(savedMessage.getSender().getNickname())
+                            .receiverId(receiverId)
+                            .content(content)
+                            .timestamp(savedMessage.getCreatedAt())
+                            .build();
+                    sendMessage(senderSession, senderMessage);
 
-            log.info("私聊消息已发送: {} -> {}", senderId, receiverId);
+                    log.info("私聊消息已发送: {} -> {}", senderId, receiverId);
+                } catch (Exception e) {
+                    log.error("处理私聊消息时发生错误", e);
+                    sendMessage(senderSession, WebSocketMessage.error("发送消息失败: " + e.getMessage()));
+                }
+            }).exceptionally(throwable -> {
+                log.error("保存私聊消息时发生错误", throwable);
+                sendMessage(senderSession, WebSocketMessage.error("发送消息失败: " + throwable.getMessage()));
+                return null;
+            });
+
         } catch (Exception e) {
             log.error("处理私聊消息时发生错误", e);
             sendMessage(senderSession, WebSocketMessage.error("发送消息失败: " + e.getMessage()));
         }
+    }
+
+    /**
+     * 异步保存私聊消息
+     */
+    @Async("messageTaskExecutor")
+    public CompletableFuture<Message> savePrivateMessageAsync(Long senderId, Long receiverId, String content) {
+        return CompletableFuture.supplyAsync(() -> messageService.savePrivateMessage(senderId, receiverId, content));
     }
 
     /**
@@ -218,52 +242,73 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            // 保存消息到数据库
-            Message savedMessage = messageService.saveGroupMessage(senderId, groupId, content);
+            // 异步保存消息到数据库
+            CompletableFuture<Message> future = saveGroupMessageAsync(senderId, groupId, content);
+            
+            // 处理结果
+            future.thenAccept(savedMessage -> {
+                try {
+                    // 构建响应消息
+                    WebSocketMessage responseMessage = WebSocketMessage.builder()
+                            .type(WebSocketMessageType.GROUP_MESSAGE)
+                            .messageId(savedMessage.getId())
+                            .senderId(senderId)
+                            .senderUsername(wsMessage.getSenderUsername())
+                            .senderNickname(savedMessage.getSender().getNickname())
+                            .groupId(groupId)
+                            .groupName(savedMessage.getGroup().getName())
+                            .content(content)
+                            .timestamp(savedMessage.getCreatedAt())
+                            .build();
 
-            // 构建响应消息
-            WebSocketMessage responseMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessageType.GROUP_MESSAGE)
-                    .messageId(savedMessage.getId())
-                    .senderId(senderId)
-                    .senderUsername(wsMessage.getSenderUsername())
-                    .senderNickname(savedMessage.getSender().getNickname())
-                    .groupId(groupId)
-                    .groupName(savedMessage.getGroup().getName())
-                    .content(content)
-                    .timestamp(savedMessage.getCreatedAt())
-                    .build();
-
-            // 发送给群组所有在线成员
-            List<Long> memberIds = groupMemberRepository.findUserIdsByGroupId(groupId);
-            for (Long memberId : memberIds) {
-                if (!memberId.equals(senderId)) {
-                    WebSocketSession memberSession = sessionManager.getSession(memberId);
-                    if (memberSession != null && memberSession.isOpen()) {
-                        sendMessage(memberSession, responseMessage);
+                    // 发送给群组所有在线成员
+                    List<Long> memberIds = groupMemberRepository.findUserIdsByGroupId(groupId);
+                    for (Long memberId : memberIds) {
+                        if (!memberId.equals(senderId)) {
+                            WebSocketSession memberSession = sessionManager.getSession(memberId);
+                            if (memberSession != null && memberSession.isOpen()) {
+                                sendMessage(memberSession, responseMessage);
+                            }
+                        }
                     }
+
+                    // 向发送者发送消息以显示在自己的界面上
+                    WebSocketMessage senderMessage = WebSocketMessage.builder()
+                            .type(WebSocketMessageType.GROUP_MESSAGE)
+                            .messageId(savedMessage.getId())
+                            .senderId(senderId)
+                            .senderUsername(wsMessage.getSenderUsername())
+                            .senderNickname(savedMessage.getSender().getNickname())
+                            .groupId(groupId)
+                            .groupName(savedMessage.getGroup().getName())
+                            .content(content)
+                            .timestamp(savedMessage.getCreatedAt())
+                            .build();
+                    sendMessage(senderSession, senderMessage);
+
+                    log.info("群聊消息已发送: {} -> 群组{}", senderId, groupId);
+                } catch (Exception e) {
+                    log.error("处理群聊消息时发生错误", e);
+                    sendMessage(senderSession, WebSocketMessage.error("发送消息失败: " + e.getMessage()));
                 }
-            }
+            }).exceptionally(throwable -> {
+                log.error("保存群聊消息时发生错误", throwable);
+                sendMessage(senderSession, WebSocketMessage.error("发送消息失败: " + throwable.getMessage()));
+                return null;
+            });
 
-            // 向发送者发送消息以显示在自己的界面上
-            WebSocketMessage senderMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessageType.GROUP_MESSAGE)
-                    .messageId(savedMessage.getId())
-                    .senderId(senderId)
-                    .senderUsername(wsMessage.getSenderUsername())
-                    .senderNickname(savedMessage.getSender().getNickname())
-                    .groupId(groupId)
-                    .groupName(savedMessage.getGroup().getName())
-                    .content(content)
-                    .timestamp(savedMessage.getCreatedAt())
-                    .build();
-            sendMessage(senderSession, senderMessage);
-
-            log.info("群聊消息已发送: {} -> 群组{}", senderId, groupId);
         } catch (Exception e) {
             log.error("处理群聊消息时发生错误", e);
             sendMessage(senderSession, WebSocketMessage.error("发送消息失败: " + e.getMessage()));
         }
+    }
+
+    /**
+     * 异步保存群聊消息
+     */
+    @Async("messageTaskExecutor")
+    public CompletableFuture<Message> saveGroupMessageAsync(Long senderId, Long groupId, String content) {
+        return CompletableFuture.supplyAsync(() -> messageService.saveGroupMessage(senderId, groupId, content));
     }
 
     /**
