@@ -40,7 +40,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
                                        WebSocketHandler wsHandler,
                                        Map<String, Object> attributes) {
             if (request instanceof ServletServerHttpRequest servletRequest) {
-                String token = servletRequest.getServletRequest().getParameter("token");
+                String token = getTokenFromRequest(servletRequest.getServletRequest());
 
                 if (token != null && jwtTokenProvider.validateToken(token)) {
                     Long userId = jwtTokenProvider.getUserIdFromToken(token);
@@ -48,6 +48,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
                     attributes.put("userId", userId);
                     attributes.put("username", username);
+                    attributes.put("token", token); // 保存token用于后续验证
 
                     log.info("WebSocket握手成功 - 用户: {}, ID: {}", username, userId);
                     return true;
@@ -63,6 +64,32 @@ public class WebSocketConfig implements WebSocketConfigurer {
                                    WebSocketHandler wsHandler,
                                    Exception exception) {
             // 握手后处理
+        }
+        
+        private String getTokenFromRequest(jakarta.servlet.http.HttpServletRequest request) {
+            // 首先检查查询参数中的token
+            String token = request.getParameter("token");
+            if (token != null) {
+                return token;
+            }
+            
+            // 然后检查Authorization header
+            String bearerToken = request.getHeader("Authorization");
+            if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+                return bearerToken.substring(7);
+            }
+            
+            // 最后检查Cookie中的token
+            jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                for (jakarta.servlet.http.Cookie cookie : cookies) {
+                    if ("token".equals(cookie.getName())) {
+                        return cookie.getValue();
+                    }
+                }
+            }
+            
+            return null;
         }
     }
 }

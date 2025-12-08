@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聊天室</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
 </head>
 <body>
     <div class="container">
@@ -67,11 +68,17 @@
                     <div class="online-users">
                         <h3>在线用户</h3>
                         <ul id="online-users-list"></ul>
+                        <button id="invite-user-btn" class="hidden">邀请用户</button>
                     </div>
                     <div class="groups">
                         <h3>我的群组</h3>
                         <ul id="groups-list"></ul>
                         <button id="create-group-btn">创建群组</button>
+                    </div>
+                    <div class="group-members hidden">
+                        <h3>群组成员</h3>
+                        <ul id="group-members-list"></ul>
+                        <button id="invite-member-btn" class="hidden">邀请成员</button>
                     </div>
                 </div>
 

@@ -47,11 +47,11 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/ws/**",
                                 "/h2-console/**",
+                                "/favicon.ico",
                                 "/",
                                 "/index.html",
                                 "/css/**",
-                                "/js/**",
-                                "/favicon.ico"
+                                "/js/**"
                         ).permitAll()
                         // 其他接口需要认证
                         .anyRequest().authenticated()

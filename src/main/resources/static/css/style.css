@@ -152,24 +152,25 @@ main {
     margin: 0;
 }
 
-#online-users-list, #groups-list {
+#online-users-list, #groups-list, #group-members-list {
     list-style: none;
     padding: 0;
     margin: 0;
+    flex: 1;
 }
 
-#online-users-list li, #groups-list li {
+#online-users-list li, #groups-list li, #group-members-list li {
     padding: 0.75rem 1rem;
     border-bottom: 1px solid #eee;
     cursor: pointer;
     transition: background-color 0.2s;
 }
 
-#online-users-list li:hover, #groups-list li:hover {
+#online-users-list li:hover, #groups-list li:hover, #group-members-list li:hover {
     background-color: #f5f5f5;
 }
 
-#create-group-btn {
+#create-group-btn, #invite-member-btn, #invite-user-btn {
     margin: 1rem;
     padding: 0.5rem;
     background-color: #4a6fa5;
@@ -177,6 +178,10 @@ main {
     border: none;
     border-radius: 4px;
     cursor: pointer;
+}
+
+#create-group-btn:hover, #invite-member-btn:hover, #invite-user-btn:hover {
+    background-color: #3a5a80;
 }
 
 .chat-area {

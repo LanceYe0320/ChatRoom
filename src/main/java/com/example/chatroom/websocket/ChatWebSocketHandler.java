@@ -7,6 +7,7 @@ import com.example.chatroom.entity.enums.MessageType;
 import com.example.chatroom.exception.WebSocketException;
 import com.example.chatroom.repository.GroupMemberRepository;
 import com.example.chatroom.repository.UserRepository;
+import com.example.chatroom.security.JwtTokenProvider;
 import com.example.chatroom.service.MessageService;
 import com.example.chatroom.websocket.dto.WebSocketMessage;
 import com.example.chatroom.websocket.dto.WebSocketMessageType;
@@ -37,6 +38,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final UserRepository userRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final ObjectMapper objectMapper;
+    private final JwtTokenProvider jwtTokenProvider; // 添加JWT token provider
 
     @Override
     @Transactional
@@ -94,8 +96,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        // 检查会话关联的用户是否仍然有效
         Long userId = getUserId(session);
         String username = getUsername(session);
+        
+        // 验证用户token是否仍然有效
+        String token = (String) session.getAttributes().get("token");
+        if (token == null || !jwtTokenProvider.validateToken(token)) {
+            log.warn("用户 {} 的token已失效，关闭WebSocket连接", userId);
+            sendMessage(session, WebSocketMessage.error("认证已过期，请重新登录"));
+            session.close();
+            return;
+        }
 
         try {
             WebSocketMessage wsMessage = objectMapper.readValue(message.getPayload(), WebSocketMessage.class);
