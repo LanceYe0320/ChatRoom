@@ -14,6 +14,10 @@
 - [x] WebSocket实时通信
 - [x] RESTful API接口
 - [x] 群组创建和管理
+- [x] 群组成员管理（查看成员、邀请成员）
+- [x] 角色区分（群主、普通成员）
+- [x] 安全访问控制（未登录无法访问聊天室）
+- [x] 多线程消息处理（异步处理数据库操作）
 
 ## 技术栈
 
@@ -22,6 +26,7 @@
 - **Spring Security** - 安全认证
 - **Spring Data JPA** - 数据持久化
 - **Spring WebSocket** - 实时通信
+- **Spring Scheduling** - 线程池和异步任务处理
 - **MySQL/H2** - 数据库
 - **JWT** - Token认证
 - **Maven** - 项目构建工具
@@ -150,11 +155,13 @@ java -jar target/ChatRoom-1.0.0.jar
 ### 群组相关
 - `POST /api/groups` - 创建群组
 - `GET /api/groups/{id}` - 获取群组信息
-- `GET /api/groups/{id}/members` - 获取群组成员
+- `GET /api/groups/{id}/members` - 获取群组成员详情
 - `GET /api/groups/my` - 获取当前用户加入的群组
 - `GET /api/groups/search?keyword=xxx` - 搜索群组
 - `POST /api/groups/{id}/join` - 加入群组
 - `DELETE /api/groups/{id}/leave` - 离开群组
+- `DELETE /api/groups/{groupId}/members/{userId}` - 移除成员（仅群主）
+- `GET /api/groups/{id}/members/list` - 获取群组成员列表
 
 ### 消息相关
 - `GET /api/messages/private/{userId}?page=0&size=20` - 获取与指定用户的私聊消息
@@ -162,6 +169,21 @@ java -jar target/ChatRoom-1.0.0.jar
 - `GET /api/messages/unread` - 获取未读消息
 - `PUT /api/messages/{messageId}/read` - 标记消息为已读
 - `PUT /api/messages/read/{senderId}` - 标记与某用户的所有消息为已读
+
+## 多线程处理
+
+为了提高系统性能和响应速度，本项目实现了多线程处理机制：
+
+1. 使用自定义线程池处理耗时的数据库操作
+2. 将消息保存操作异步化，避免阻塞WebSocket消息处理主线程
+3. 通过CompletableFuture处理异步操作结果
+
+线程池配置：
+- 核心线程数：5
+- 最大线程数：20
+- 队列容量：100
+- 线程空闲时间：60秒
+- 拒绝策略：调用者运行策略
 
 ## WebSocket通信
 
@@ -217,12 +239,27 @@ mvn test
 2. 确认JWT Token有效
 3. 查看浏览器控制台错误信息
 
+### Favicon错误
+应用包含了一个默认的favicon.ico文件。如果您想使用自定义图标，请替换`src/main/resources/static/favicon.ico`文件。
+
 ## 最近更新
 
-### 消息功能增强
-- 消息持久化存储和历史记录查看
-- 发送消息时在发送者界面同步显示
-- 完善的群组创建和管理功能
+### 安全性增强
+- 添加了访问控制，未登录用户无法访问聊天室
+- 强化了WebSocket连接的安全检查
+
+### 群组功能完善
+- 支持查看群组成员列表
+- 支持邀请用户加入群组
+- 区分群主和普通成员角色
+
+### 用户体验改进
+- 前端界面优化，添加了群组成员显示区域
+- 支持在群组中邀请成员
+
+### 性能优化
+- 实现多线程消息处理，将耗时的数据库操作异步化，提高系统响应速度
+- 使用线程池管理后台任务，避免频繁创建销毁线程的开销
 
 ## 贡献
 
