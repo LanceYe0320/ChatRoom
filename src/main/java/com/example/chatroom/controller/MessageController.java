@@ -61,4 +61,35 @@ public class MessageController {
         messageService.markMessagesAsRead(userDetails.getUserId(), senderId);
         return ResponseEntity.ok(ApiResponse.success("消息已标记为已读"));
     }
+    
+    @GetMapping("/offline")
+    public ResponseEntity<ApiResponse<List<MessageResponse>>> getOfflineMessages(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        // 获取用户上次登录时间，如果没有则使用账户创建时间
+        var currentUser = userDetails.getUserId();
+        var user = messageService.getCurrentUserById(currentUser);
+        var lastLoginTime = user.getLastLoginTime();
+        
+        if (lastLoginTime == null) {
+            lastLoginTime = user.getCreatedAt();
+        }
+        
+        var messages = messageService.getUnreadMessagesForUser(
+            userDetails.getUserId(), 
+            lastLoginTime
+        );
+        
+        List<MessageResponse> response = messages.stream()
+                .map(MessageResponse::fromEntity)
+                .toList();
+                
+        return ResponseEntity.ok(ApiResponse.success("获取离线消息成功", response));
+    }
+    
+    @GetMapping("/conversations")
+    public ResponseEntity<ApiResponse<List<Long>>> getConversationUserIds(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        List<Long> userIds = messageService.getRecentConversationUserIds(userDetails.getUserId());
+        return ResponseEntity.ok(ApiResponse.success("获取对话用户列表成功", userIds));
+    }
 }

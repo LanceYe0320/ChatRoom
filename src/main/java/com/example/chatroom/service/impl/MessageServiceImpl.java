@@ -111,6 +111,12 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<Message> getUnreadMessagesForUser(Long userId, LocalDateTime lastLoginTime) {
+        return messageRepository.findUnreadPrivateMessagesForUser(userId, lastLoginTime);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<MessageResponse> getUnreadMessages(Long userId) {
         return messageRepository.findUnreadPrivateMessages(userId)
                 .stream()
@@ -132,8 +138,21 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
+    @Transactional
+    public void updateMessageStatus(Long messageId, MessageStatus status) {
+        messageRepository.updateMessageStatus(messageId, status, LocalDateTime.now());
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<Long> getRecentConversationUserIds(Long userId) {
         return messageRepository.findRecentConversationUserIds(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public User getCurrentUserById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("用户不存在"));
     }
 }

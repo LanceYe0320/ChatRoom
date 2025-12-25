@@ -6,6 +6,7 @@ class ChatApp {
         this.currentGroup = null; // 当前聊天的群组信息
         this.ws = null;
         this.tokenCheckInterval = null; // 添加定时检查token的间隔
+        this.offlineMessageCheckInterval = null; // 添加离线消息检查定时器
         
         this.initElements();
         this.bindEvents();
@@ -66,6 +67,15 @@ class ChatApp {
         // 邀请成员
         this.inviteMemberBtn.addEventListener('click', () => this.inviteMember());
         this.inviteUserBtn.addEventListener('click', () => this.inviteUser());
+        
+        // 添加检查离线消息按钮事件
+        document.addEventListener('keydown', (e) => {
+            // 按Ctrl+O来手动检查离线消息
+            if (e.ctrlKey && e.key === 'o') {
+                e.preventDefault();
+                this.checkOfflineMessages();
+            }
+        });
     }
     
     switchToLogin() {
@@ -107,6 +117,7 @@ class ChatApp {
                 this.connectWebSocket();
                 this.loadOnlineUsers();
                 this.loadUserGroups();
+                this.startOfflineMessageCheck(); // 开始检查离线消息
             } else {
                 alert('登录失败: ' + data.message);
             }
@@ -143,6 +154,7 @@ class ChatApp {
                 this.connectWebSocket();
                 this.loadOnlineUsers();
                 this.loadUserGroups();
+                this.startOfflineMessageCheck(); // 开始检查离线消息
             } else {
                 alert('注册失败: ' + data.message);
             }
@@ -222,6 +234,12 @@ class ChatApp {
             this.tokenCheckInterval = null;
         }
         
+        // 清除离线消息检查定时器
+        if (this.offlineMessageCheckInterval) {
+            clearInterval(this.offlineMessageCheckInterval);
+            this.offlineMessageCheckInterval = null;
+        }
+        
         this.token = null;
         this.currentUser = null;
         localStorage.removeItem('token');
@@ -298,14 +316,16 @@ class ChatApp {
     handleWebSocketMessage(message) {
         switch (message.type) {
             case 'USER_ONLINE':
-                this.addUserToList(message.senderId, message.senderUsername, true);
+                this.updateUserStatus(message.senderId, message.senderUsername, true);
                 this.displaySystemMessage(`${message.senderUsername} 上线了`);
                 break;
             case 'USER_OFFLINE':
-                this.removeUserFromList(message.senderId);
+                this.updateUserStatus(message.senderId, message.senderUsername, false);
                 this.displaySystemMessage(`${message.senderUsername} 下线了`);
                 break;
             case 'PRIVATE_MESSAGE':
+                // 检查发送者是否在用户列表中，如果不在则添加
+                this.addUserIfNotInList(message.senderId, message.senderUsername, false);
                 this.displayPrivateMessage(message);
                 break;
             case 'GROUP_MESSAGE':
@@ -315,7 +335,8 @@ class ChatApp {
                 this.displaySystemMessage(message.content);
                 break;
             case 'PRIVATE_MESSAGE_ACK':
-                // 这是发送私聊消息的确认，我们可以在这里加载历史消息或做其他处理
+                // 这是发送私聊消息的确认，消息已成功发送或已保存为离线消息
+                console.log('私聊消息已发送或保存为离线消息:', message);
                 break;
             case 'GROUP_MESSAGE_ACK':
                 // 这是发送群聊消息的确认
@@ -325,28 +346,56 @@ class ChatApp {
     
     async loadOnlineUsers() {
         try {
-            const response = await fetch('/api/users/online', {
+            // 获取在线用户信息
+            const onlineUsersResponse = await fetch('/api/users/online', {
                 headers: {
                     'Authorization': `Bearer ${this.token}`
                 }
             });
             
-            const data = await response.json();
+            const onlineUsersData = await onlineUsersResponse.json();
             
-            if (data.success) {
+            if (onlineUsersData.success) {
                 this.onlineUsersList.innerHTML = '';
-                data.data.forEach(user => {
-                    if (user.id !== this.currentUser.id) {
-                        const li = document.createElement('li');
-                        li.textContent = user.username;
-                        li.dataset.userId = user.id;
-                        li.addEventListener('click', () => this.startPrivateChat(user));
-                        this.onlineUsersList.appendChild(li);
+                
+                // 获取所有用户信息以显示完整列表
+                const allUsersResponse = await fetch('/api/users', {
+                    headers: {
+                        'Authorization': `Bearer ${this.token}`
                     }
                 });
+                
+                const allUsersData = await allUsersResponse.json();
+                
+                if (allUsersData.success) {
+                    // 创建在线用户ID集合
+                    const onlineUserIds = new Set(onlineUsersData.data.map(user => user.id));
+                    
+                    // 显示所有用户，标记在线/离线状态
+                    allUsersData.data.forEach(user => {
+                        if (user.id !== this.currentUser.id) {
+                            const li = document.createElement('li');
+                            
+                            // 根据在线状态设置样式
+                            if (onlineUserIds.has(user.id)) {
+                                li.innerHTML = `<strong>${user.username}</strong> (在线)`;
+                                li.style.fontWeight = 'bold';
+                            } else {
+                                li.innerHTML = `${user.username} (离线)`;
+                                li.style.fontWeight = 'normal';
+                            }
+                            
+                            li.dataset.userId = user.id;
+                            li.dataset.username = user.username;
+                            li.dataset.online = onlineUserIds.has(user.id);
+                            li.addEventListener('click', () => this.startPrivateChat(user));
+                            this.onlineUsersList.appendChild(li);
+                        }
+                    });
+                }
             }
         } catch (error) {
-            console.error('加载在线用户失败:', error);
+            console.error('加载用户列表失败:', error);
         }
     }
     
@@ -376,20 +425,27 @@ class ChatApp {
     }
     
     async startPrivateChat(user) {
+        // 确保user对象包含所有必要属性
+        const userObj = {
+            id: user.id,
+            username: user.username || user.name,
+            online: user.online
+        };
+        
         this.currentChat = {
             type: 'user',
-            id: user.id,
-            name: user.username
+            id: userObj.id,
+            name: userObj.username
         };
         this.currentGroup = null;
-        this.chatTitle.textContent = `与 ${user.username} 聊天`;
+        this.chatTitle.textContent = `与 ${userObj.username} 聊天`;
         this.messagesContainer.innerHTML = '';
         this.groupMembersSection.classList.add('hidden');
         this.inviteUserBtn.classList.add('hidden'); // 默认隐藏邀请用户按钮
         this.inviteMemberBtn.classList.add('hidden');
         
         // 加载历史消息
-        await this.loadPrivateChatHistory(user.id);
+        await this.loadPrivateChatHistory(userObj.id);
     }
     
     async startGroupChat(group) {
@@ -610,22 +666,87 @@ class ChatApp {
     addUserToList(userId, username, isOnline) {
         // 检查用户是否已经在列表中
         const existingUser = Array.from(this.onlineUsersList.children)
-            .find(li => li.dataset.userId == userId);
+            .find(li => li.dataset.userId === userId);
             
-        if (!existingUser && userId != this.currentUser.id) {
+        if (!existingUser && userId !== this.currentUser.id) {
             const li = document.createElement('li');
-            li.textContent = username;
+            
+            // 根据在线状态设置样式
+            if (isOnline) {
+                li.innerHTML = `<strong>${username}</strong> (在线)`;
+                li.style.fontWeight = 'bold';
+            } else {
+                li.innerHTML = `${username} (离线)`;
+                li.style.fontWeight = 'normal';
+            }
+            
             li.dataset.userId = userId;
+            li.dataset.username = username;
+            li.dataset.online = isOnline;
+            li.addEventListener('click', () => {
+                // 创建用户对象以兼容startPrivateChat方法
+                const user = { id: userId, username: username, online: isOnline };
+                this.startPrivateChat(user);
+            });
             this.onlineUsersList.appendChild(li);
         }
     }
     
     removeUserFromList(userId) {
+        // 不删除用户，只更新状态为离线
+        this.updateUserStatus(userId, null, false);
+    }
+    
+    updateUserStatus(userId, username, isOnline) {
+        // 查找用户列表项
         const userElement = Array.from(this.onlineUsersList.children)
-            .find(li => li.dataset.userId == userId);
+            .find(li => li.dataset.userId === userId);
             
         if (userElement) {
-            userElement.remove();
+            // 更新现有用户的显示
+            if (username) {
+                userElement.dataset.username = username;
+            }
+            userElement.dataset.online = isOnline;
+            
+            // 根据在线状态更新显示
+            if (isOnline) {
+                userElement.innerHTML = `<strong>${userElement.dataset.username}</strong> (在线)`;
+                userElement.style.fontWeight = 'bold';
+            } else {
+                userElement.innerHTML = `${userElement.dataset.username} (离线)`;
+                userElement.style.fontWeight = 'normal';
+            }
+        }
+        // 如果用户不在列表中，不自动添加，保持现有逻辑
+    }
+    
+    addUserIfNotInList(userId, username, isOnline) {
+        // 检查用户是否已经在列表中
+        const existingUser = Array.from(this.onlineUsersList.children)
+            .find(li => li.dataset.userId === userId);
+            
+        if (!existingUser && userId !== this.currentUser.id) {
+            const li = document.createElement('li');
+            
+            // 根据在线状态设置样式
+            if (isOnline) {
+                li.innerHTML = `<strong>${username}</strong> (在线)`;
+                li.style.fontWeight = 'bold';
+            } else {
+                li.innerHTML = `${username} (离线)`;
+                li.style.fontWeight = 'normal';
+            }
+            
+            li.dataset.userId = userId;
+            li.dataset.username = username;
+            li.dataset.online = isOnline;
+            li.addEventListener('click', () => {
+                // 创建用户对象以兼容startPrivateChat方法
+                const user = { id: userId, username: username, online: isOnline };
+                this.startPrivateChat(user);
+            });
+            this.onlineUsersList.appendChild(li);
         }
     }
     
@@ -756,6 +877,56 @@ class ChatApp {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    // 开始检查离线消息
+    startOfflineMessageCheck() {
+        // 清除之前的定时器
+        if (this.offlineMessageCheckInterval) {
+            clearInterval(this.offlineMessageCheckInterval);
+        }
+        
+        // 每30秒检查一次离线消息
+        this.offlineMessageCheckInterval = setInterval(async () => {
+            await this.checkOfflineMessages();
+        }, 30000); // 30秒
+        
+        // 登录后立即检查一次离线消息
+        this.checkOfflineMessages();
+    }
+    
+    // 检查离线消息
+    async checkOfflineMessages() {
+        try {
+            const response = await fetch('/api/messages/offline', {
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+                if (data.data.length > 0) {
+                    // 显示离线消息通知
+                    this.displaySystemMessage(`您有 ${data.data.length} 条离线消息`);
+                    
+                    // 显示离线消息
+                    data.data.forEach(message => {
+                        const wsMessage = {
+                            type: 'PRIVATE_MESSAGE',
+                            senderId: message.senderId,
+                            senderUsername: message.senderUsername,
+                            content: message.content,
+                            timestamp: message.createdAt
+                        };
+                        this.displayPrivateMessage(wsMessage);
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('检查离线消息失败:', error);
+        }
     }
 }
 

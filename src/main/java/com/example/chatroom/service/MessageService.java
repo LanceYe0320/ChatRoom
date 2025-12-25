@@ -2,6 +2,7 @@ package com.example.chatroom.service;
 
 import com.example.chatroom.dto.response.MessageResponse;
 import com.example.chatroom.entity.Message;
+import com.example.chatroom.entity.User;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,11 +19,17 @@ public interface MessageService {
 
     List<Message> getOfflineMessages(Long userId, LocalDateTime lastLogoutTime);
 
+    List<Message> getUnreadMessagesForUser(Long userId, LocalDateTime lastLoginTime);
+
     List<MessageResponse> getUnreadMessages(Long userId);
 
     void markMessagesAsRead(Long receiverId, Long senderId);
 
     void markMessageAsRead(Long messageId);
 
+    void updateMessageStatus(Long messageId, com.example.chatroom.entity.enums.MessageStatus status);
+
     List<Long> getRecentConversationUserIds(Long userId);
+
+    User getCurrentUserById(Long userId);
 }

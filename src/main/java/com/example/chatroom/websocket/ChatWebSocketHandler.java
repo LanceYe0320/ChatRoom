@@ -3,6 +3,7 @@ package com.example.chatroom.websocket;
 import com.example.chatroom.dto.response.MessageResponse;
 import com.example.chatroom.entity.Message;
 import com.example.chatroom.entity.User;
+import com.example.chatroom.entity.enums.MessageStatus;
 import com.example.chatroom.entity.enums.MessageType;
 import com.example.chatroom.exception.WebSocketException;
 import com.example.chatroom.repository.GroupMemberRepository;
@@ -157,6 +158,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
+        // 检查接收者是否存在
+        User receiver = userRepository.findById(receiverId).orElse(null);
+        if (receiver == null) {
+            sendMessage(senderSession, WebSocketMessage.error("接收者不存在"));
+            return;
+        }
+
         try {
             // 异步保存消息到数据库
             CompletableFuture<Message> future = savePrivateMessageAsync(senderId, receiverId, content);
@@ -178,15 +186,21 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                             .timestamp(savedMessage.getCreatedAt())
                             .build();
 
-                    // 发送给接收者
+                    // 检查接收者是否在线
                     WebSocketSession receiverSession = sessionManager.getSession(receiverId);
                     if (receiverSession != null && receiverSession.isOpen()) {
+                        // 接收者在线，直接发送消息
                         sendMessage(receiverSession, responseMessage);
+                        
+                        // 更新消息状态为已送达
+                        messageService.updateMessageStatus(savedMessage.getId(), MessageStatus.DELIVERED);
+                    } else {
+                        log.info("接收者 {} 不在线，消息将作为离线消息保存", receiverId);
                     }
 
                     // 向发送者发送消息以显示在自己的界面上
                     WebSocketMessage senderMessage = WebSocketMessage.builder()
-                            .type(WebSocketMessageType.PRIVATE_MESSAGE)
+                            .type(WebSocketMessageType.PRIVATE_MESSAGE_ACK) // 使用ACK类型通知发送者
                             .messageId(savedMessage.getId())
                             .senderId(senderId)
                             .senderUsername(wsMessage.getSenderUsername())
@@ -197,7 +211,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                             .build();
                     sendMessage(senderSession, senderMessage);
 
-                    log.info("私聊消息已发送: {} -> {}", senderId, receiverId);
+                    log.info("私聊消息已处理: {} -> {}", senderId, receiverId);
                 } catch (Exception e) {
                     log.error("处理私聊消息时发生错误", e);
                     sendMessage(senderSession, WebSocketMessage.error("发送消息失败: " + e.getMessage()));

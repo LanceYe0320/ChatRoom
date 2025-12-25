@@ -24,6 +24,8 @@ public interface UserService {
 
     List<UserResponse> searchUsers(String keyword);
 
+    List<UserResponse> getAllUsers();
+
     UserResponse updateProfile(Long userId, String nickname, String avatar);
 
     void changePassword(Long userId, String oldPassword, String newPassword);

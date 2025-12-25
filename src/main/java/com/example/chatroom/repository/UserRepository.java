@@ -36,4 +36,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Modifying
     @Query("UPDATE User u SET u.online = false, u.lastLogoutTime = :time WHERE u.id = :userId")
     void setOffline(@Param("userId") Long userId, @Param("time") LocalDateTime time);
+    
+    @Query("SELECT u FROM User u WHERE u.id = :userId")
+    User findUserById(@Param("userId") Long userId);
 }

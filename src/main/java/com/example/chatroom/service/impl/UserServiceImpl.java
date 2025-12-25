@@ -140,6 +140,15 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<UserResponse> getAllUsers() {
+        return userRepository.findAll()
+                .stream()
+                .map(UserResponse::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public UserResponse updateProfile(Long userId, String nickname, String avatar) {
         User user = userRepository.findById(userId)

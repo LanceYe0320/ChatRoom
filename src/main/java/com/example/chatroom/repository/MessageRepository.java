@@ -38,6 +38,13 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findOfflinePrivateMessages(@Param("userId") Long userId,
                                              @Param("lastLogoutTime") LocalDateTime lastLogoutTime);
 
+    // 获取用户的离线私聊消息（改进版，包含未送达的消息）
+    @Query("SELECT m FROM Message m WHERE m.messageType = 'PRIVATE' " +
+            "AND m.receiver.id = :userId AND m.createdAt > :lastLoginTime " +
+            "ORDER BY m.createdAt ASC")
+    List<Message> findUnreadPrivateMessagesForUser(@Param("userId") Long userId,
+                                                   @Param("lastLoginTime") LocalDateTime lastLoginTime);
+
     // 获取用户未读的私聊消息
     @Query("SELECT m FROM Message m WHERE m.messageType = 'PRIVATE' " +
             "AND m.receiver.id = :userId AND m.status != 'READ' " +

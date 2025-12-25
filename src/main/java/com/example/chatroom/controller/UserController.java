@@ -48,4 +48,11 @@ public class UserController {
         List<UserResponse> users = userService.searchUsers(keyword);
         return ResponseEntity.ok(ApiResponse.success("搜索用户成功", users));
     }
+    
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getAllUsers(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        List<UserResponse> users = userService.getAllUsers();
+        return ResponseEntity.ok(ApiResponse.success("获取所有用户成功", users));
+    }
 }
